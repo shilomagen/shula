@@ -1,0 +1,171 @@
+---
+description: Webapps
+globs: webapps/**/*.*
+alwaysApply: false
+---
+# Frontend Development Guidelines
+- This is an RTL application, make sure to have the right spacing and the styling is RIGHT!
+
+## Technical Stack
+- TypeScript
+- Next.js App Router
+- React
+- Shadcn UI
+- Radix UI
+- Tailwind CSS
+
+## Code Style and Structure
+- Write concise, technical TypeScript code with accurate examples.
+- Use functional and declarative programming patterns; avoid classes.
+- Prefer iteration and modularization over code duplication.
+- Use descriptive variable names with auxiliary verbs (e.g., isLoading, hasError).
+- Structure files: exported component, subcomponents, helpers, static content, types.
+- Follow DRY (Don't Repeat Yourself) principles across the codebase.
+- Use proper error handling with try/catch blocks where appropriate.
+
+## Naming Conventions
+- Use lowercase with dashes for directories (e.g., `components/auth-wizard`).
+- Favor named exports for components.
+- Use PascalCase for component names (e.g., `LoginForm.tsx`).
+- Use camelCase for functions, variables, and properties.
+- Prefix boolean variables with auxiliary verbs (is, has, should, can).
+- Prefix event handlers with `handle` (e.g., `handleSubmit`, `handleInputChange`).
+- Suffix custom hooks with `use` (e.g., `useAuth`, `useFormValidation`).
+- Use `on` prefix for component props that are event handlers (e.g., `onSubmit`, `onChange`).
+- Maintain a clear distinction between server and client components in filenames, using `.server.tsx` and `.client.tsx` suffixes when appropriate.
+
+## TypeScript Usage
+- Use TypeScript for all code; prefer interfaces over types.
+- Avoid enums; use maps instead.
+- Use functional components with TypeScript interfaces.
+- Define proper return types for functions.
+- Use generics where appropriate to create reusable components.
+- Create dedicated type definition files (`.d.ts`) for complex type structures.
+- Use zod for runtime validation of data structures.
+
+## Syntax and Formatting
+- Use the "function" keyword for pure functions.
+- Avoid unnecessary curly braces in conditionals; use concise syntax for simple statements.
+- Use declarative JSX.
+- Prefer destructuring for props and state.
+- Use optional chaining (`?.`) and nullish coalescing (`??`) operators.
+- Maintain consistent indentation (2 spaces).
+
+## UI and Styling
+- Use ONLY Shadcn UI components for the entire application.
+- Customize Shadcn UI components using Tailwind CSS.
+- Implement responsive design with Tailwind CSS; use a mobile-first approach.
+- Utilize Tailwind's built-in RTL support for bidirectional text.
+- Use semantic HTML elements where ShadcnUI components aren't available.
+- Create responsive layouts using Tailwind's responsive modifiers.
+- Do not use raw Radix UI components directly; only use the Shadcn implementations.
+
+## RTL (Right-to-Left) Support
+- Set `dir="rtl"` at the html or body level.
+- Use the `rtl:` variant in Tailwind for RTL-specific styling.
+- Configure `tailwind.config.js` to support RTL:
+  ```js
+  module.exports = {
+    theme: {
+      extend: {
+        textDirection: {
+          rtl: 'rtl',
+        },
+      },
+    },
+    plugins: [require('tailwindcss-rtl')],
+  }
+  ```
+- Use logical properties instead of directional properties:
+  - Use `ms-` (margin-start) instead of `ml-` (margin-left)
+  - Use `me-` (margin-end) instead of `mr-` (margin-right)
+  - Use `ps-` (padding-start) instead of `pl-` (padding-left)
+  - Use `pe-` (padding-end) instead of `pr-` (padding-right)
+- Test UI components in RTL mode during development.
+
+## Hebrew Language Support
+- Set default language to Hebrew with appropriate locale settings.
+- Use UTF-8 encoding for all text content.
+- Implement proper font support for Hebrew characters.
+- Recommended font families: Assistant, Rubik, or Frank Ruhl Libre.
+- Configure font settings in Tailwind:
+  ```js
+  // tailwind.config.js
+  module.exports = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Assistant', 'system-ui', 'sans-serif'],
+          display: ['Rubik', 'system-ui', 'sans-serif'],
+        },
+      },
+    },
+  }
+  ```
+
+## Localization
+- Store all text content in TypeScript locale files under `/locales` directory.
+- Use a single `he.ts` file for Hebrew translations.
+- Use next-intl or next-i18next for internationalization.
+- Structure locale files with nested objects for better organization:
+  ```typescript
+  // locales/he.ts
+  const locale= {
+    auth: {
+      login: {
+        title: "התחברות",
+        emailLabel: "דוא\"ל",
+        passwordLabel: "סיסמה",
+        submitButton: "התחבר",
+        errors: {
+          invalidEmail: "כתובת דוא\"ל לא תקינה",
+          invalidPassword: "סיסמה לא תקינה"
+        }
+      }
+    },
+    dashboard: {
+      // Dashboard translations
+    }
+  }
+  export default locale;
+  ```
+
+## Performance Optimization
+- Minimize 'use client', 'useEffect', and 'setState'; favor React Server Components (RSC).
+- Wrap client components in Suspense with fallback.
+- Use dynamic loading for non-critical components.
+- Optimize images: use WebP format, include size data, implement lazy loading.
+- Implement proper loading states for asynchronous operations.
+- Use React.memo() for expensive components that render often.
+- Implement virtualization for long lists (react-window or react-virtualized).
+- Optimize re-renders by using useMemo and useCallback appropriately.
+- Implement code splitting using Next.js dynamic imports.
+
+## Naming Conventions
+- Use lowercase with dashes for directories (e.g., components/auth-wizard).
+- Favor named exports for components.
+- Use camelCase for variables and functions.
+- Use PascalCase for constructors and React components.
+- Use kebab-case for file names.
+
+## Key Conventions
+- Use 'nuqs' for URL search parameter state management.
+- Optimize Web Vitals (LCP, CLS, FID).
+- Limit 'use client':
+  - Favor server components and Next.js SSR.
+  - Use only for Web API access in small components.
+  - Avoid for data fetching or state management.
+- Create shared utility functions for common operations.
+- Implement error boundaries around critical UI sections.
+- Use consistent date and number formatting with RTL considerations.
+- Ensure all UI components are implemented with ShadCN.
+- Structure component library imports consistently:
+  ```tsx
+  import { Button } from "@/components/ui/button";
+  import { Input } from "@/components/ui/input";
+  // etc.
+  ```
+
+
+
+Follow Next.js docs for Data Fetching, Rendering, and Routing.

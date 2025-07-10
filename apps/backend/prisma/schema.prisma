@@ -1,0 +1,287 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Group {
+  id                  String                @id @default(uuid()) @db.Uuid
+  whatsappGroupId     String                @unique @map("whatsapp_group_id")
+  name                String
+  description         String?
+  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  status              EntityStatus          @default(active)
+  consentStatus       GroupConsentStatus    @default(pending) @map("consent_status")
+  consentPollId       String?               @map("consent_poll_id") // ID of the poll message in WhatsApp
+  consentMessageId    String?               @map("consent_message_id") // ID of the consent message in WhatsApp
+  consentRequestedAt  DateTime?             @map("consent_requested_at") @db.Timestamptz(6)
+  consentCompletedAt  DateTime?             @map("consent_completed_at") @db.Timestamptz(6)
+  participants        GroupParticipant[]
+  eventLogs           GroupEventLog[]
+  participantConsents ParticipantConsent[] // Reference to individual participant consent records
+  pendingMessages     PendingGroupMessage[] // Pending messages to be sent later
+
+  @@index([whatsappGroupId, consentMessageId])
+  @@map("groups")
+}
+
+model Participant {
+  id                 String               @id @default(uuid()) @db.Uuid
+  phoneNumber        String               @unique @map("phone_number")
+  name               String
+  joinedAt           DateTime             @default(now()) @map("joined_at") @db.Timestamptz(6)
+  status             EntityStatus         @default(active)
+  conversations      Conversation[]
+  groups             GroupParticipant[]
+  mediaDistributions MediaDistribution[]
+  persons            Person[] // Direct one-to-many relationship to Person
+  ParticipantConsent ParticipantConsent[]
+
+  @@map("participants")
+}
+
+model GroupParticipant {
+  groupId       String      @map("group_id") @db.Uuid
+  participantId String      @map("participant_id") @db.Uuid
+  joinedAt      DateTime    @default(now()) @map("joined_at") @db.Timestamptz(6)
+  group         Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  participant   Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, participantId])
+  @@index([participantId], name: "group_participant_participant_id_idx")
+  @@map("group_participants")
+}
+
+model Person {
+  id                      String       @id @default(uuid()) @db.Uuid
+  participantId           String       @map("participant_id") @db.Uuid
+  groupId                 String       @map("group_id") @db.Uuid // We keep this as context, but no relation
+  name                    String
+  createdAt               DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  status                  EntityStatus @default(active)
+  faceIds                 String[]     @default([])
+  rekognitionCollectionId String?      @map("rekognition_collection_id")
+
+  // Relations
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  // Removing relation to Group
+
+  @@index([participantId])
+  @@index([groupId]) // Keep the index for querying efficiency
+  @@map("persons")
+}
+
+model Conversation {
+  id               String             @id @default(uuid()) @db.Uuid
+  participantId    String             @map("participant_id") @db.Uuid
+  status           ConversationStatus @default(active)
+  conversationType ConversationType   @map("conversation_type")
+  startedAt        DateTime           @default(now()) @map("started_at") @db.Timestamptz(6)
+  lastMessageAt    DateTime           @default(now()) @map("last_message_at") @db.Timestamptz(6)
+  currentNode      String?            @map("current_node")
+  metadata         Json?
+  participant      Participant        @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  messages         Message[]
+
+  @@index([participantId])
+  @@index([participantId, status])
+  @@index([status], name: "conversation_status_idx")
+  @@index([lastMessageAt], name: "conversation_last_message_at_idx")
+  @@index([conversationType, status], name: "conversation_type_status_idx")
+  @@index([participantId, conversationType], name: "conversation_participant_type_idx")
+  @@map("conversations")
+}
+
+enum ConversationMessageType {
+  USER_MESSAGE
+  AGENT_MESSAGE
+  IMAGE_UPLOAD
+  PERSON_CREATED
+  PERSON_CONNECTED
+  SYSTEM_EVENT
+}
+
+model Message {
+  id             String                  @id @default(uuid()) @db.Uuid
+  conversationId String                  @map("conversation_id") @db.Uuid
+  type           ConversationMessageType
+  content        String? // Optional because some messages might not have text content
+  metadata       Json? // Store event-specific data
+  timestamp      DateTime                @default(now()) @db.Timestamptz(6)
+  status         MessageStatus           @default(delivered)
+  photoId        String?                 @map("photo_id") // For IMAGE_UPLOAD events - stores S3 key
+
+  // Relations
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([timestamp], name: "message_timestamp_idx")
+  @@map("messages")
+}
+
+model MediaDistribution {
+  id            String                  @default(uuid()) @db.Uuid
+  photoId       String                  @map("photo_id") @db.Uuid
+  participantId String                  @map("participant_id") @db.Uuid
+  sentAt        DateTime                @default(now()) @map("sent_at") @db.Timestamptz(6)
+  status        MediaDistributionStatus @default(pending)
+  participant   Participant             @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@id([photoId, participantId])
+  @@index([status])
+  @@map("media_distributions")
+}
+
+model GroupEventLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  groupId   String   @map("group_id") @db.Uuid
+  eventType String   @map("event_type") // message_processed, media_processed, etc.
+  mediaType String?  @map("media_type") // image, video, document, audio, null for text messages
+  timestamp DateTime @default(now()) @map("timestamp") @db.Timestamptz(6)
+  metadata  Json? // Additional metadata if needed
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@index([eventType])
+  @@index([mediaType])
+  @@index([timestamp])
+  @@map("group_event_logs")
+}
+
+model SystemMessage {
+  id        String       @id @default(uuid()) @db.Uuid
+  key       String       @unique
+  content   String
+  metadata  Json?
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  status    EntityStatus @default(active)
+
+  @@map("system_messages")
+}
+
+enum EntityStatus {
+  active
+  inactive
+  deleted
+}
+
+enum PhotoProcessingStatus {
+  pending
+  processing
+  completed
+  failed
+}
+
+enum ConversationStatus {
+  active
+  completed
+  abandoned
+}
+
+enum ConversationType {
+  onboarding
+  support
+  personRegistration
+  general
+}
+
+enum MessageStatus {
+  sent
+  delivered
+  read
+  failed
+}
+
+enum MediaDistributionStatus {
+  pending
+  sent
+  delivered
+  failed
+}
+
+model WhatsAppStatus {
+  id           String   @id @default("current")
+  isHealthy    Boolean  @default(false) @map("is_healthy")
+  state        String?
+  failureCount Int      @default(0) @map("failure_count")
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("whatsapp_status")
+}
+
+model WhatsAppQrCode {
+  id        String   @id @default("current")
+  qrCode    String   @map("qr_code")
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("whatsapp_qrcode")
+}
+
+// New model for tracking individual participant consents
+model ParticipantConsent {
+  id            String              @id @default(uuid()) @db.Uuid
+  groupId       String              @map("group_id") @db.Uuid
+  participantId String              @map("participant_id") @db.Uuid
+  consentStatus ConsentResponseType @default(pending) @map("consent_status")
+  respondedAt   DateTime?           @map("responded_at") @db.Timestamptz(6)
+
+  // Relations
+  group       Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, participantId])
+  @@index([groupId])
+  @@index([participantId])
+  @@index([consentStatus])
+  @@map("participant_consents")
+}
+
+// Add new enums
+enum GroupConsentStatus {
+  pending // Waiting for participants to respond
+  approved // Enough participants approved
+  rejected // Too many participants rejected
+  expired // Poll expired without sufficient responses
+}
+
+enum ConsentResponseType {
+  pending // No response yet
+  accepted // Participant accepted
+  rejected // Participant rejected
+}
+
+// New enums for pending messages
+enum PendingMessageType {
+  GROUP_ADDED_DISABLED
+  // Can add other message types in the future if needed
+}
+
+enum PendingMessageStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+// New model for tracking pending group messages
+model PendingGroupMessage {
+  id              String               @id @default(uuid()) @db.Uuid
+  groupId         String               @map("group_id") @db.Uuid
+  whatsappGroupId String               @map("whatsapp_group_id")
+  messageType     PendingMessageType   @map("message_type")
+  groupName       String               @map("group_name")
+  createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  sentAt          DateTime?            @map("sent_at") @db.Timestamptz(6)
+  status          PendingMessageStatus @default(PENDING)
+  retryCount      Int                  @default(0) @map("retry_count")
+
+  // Relation to Group
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([whatsappGroupId])
+  @@index([status])
+  @@map("pending_group_messages")
+}

@@ -1,0 +1,45 @@
+name: Paths Filter
+
+on:
+  workflow_call:
+    outputs:
+      backend_files:
+        description: "Changes detected in backend files"
+        value: ${{ jobs.paths-filter.outputs.backend_files }}
+      whatsapp_files:
+        description: "Changes detected in whatsapp files"
+        value: ${{ jobs.paths-filter.outputs.whatsapp_files }}
+      admin_files:
+        description: "Changes detected in admin files"
+        value: ${{ jobs.paths-filter.outputs.admin_files }}
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  paths-filter:
+    runs-on: ubuntu-latest
+    outputs:
+      backend_files: ${{ steps.filter.outputs.backend_files }}
+      whatsapp_files: ${{ steps.filter.outputs.whatsapp_files }}
+      admin_files: ${{ steps.filter.outputs.admin_files }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            backend_files:
+              - 'apps/backend/**'
+              - 'libs/**'
+              - 'package.json'
+              - 'nx.json'
+            whatsapp_files:
+              - 'apps/whatsapp-container/**'
+              - 'libs/**'
+              - 'package.json'
+              - 'nx.json'
+            admin_files:
+              - 'webapps/admin/**'
+              - 'package.json' 

@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: shula-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: shula
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      
+  redis:
+    image: redis:7-alpine
+    container_name: shula-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # OpenTelemetry Collector
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"  # OTLP gRPC
+      - "4318:4318"  # OTLP HTTP
+      - "8888:8888"  # Prometheus metrics exposed by the collector
+      - "8889:8889"  # Prometheus exporter metrics
+    depends_on:
+      - jaeger
+
+  # Jaeger
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14250:14250"  # Model used by jaeger
+      - "14268:14268"  # HTTP receiver
+      - "14269:14269"  # Health check
+      
+  # Test service to verify tracing works
+  tracegen:
+    image: jaegertracing/jaeger-tracegen:latest
+    environment:
+      - JAEGER_ENDPOINT=http://otel-collector:4317
+      - JAEGER_REPORTER_LOG_SPANS=true
+      - JAEGER_AGENT_HOST=otel-collector
+      - JAEGER_AGENT_PORT=4317
+      - JAEGER_SAMPLER_TYPE=const
+      - JAEGER_SAMPLER_PARAM=1
+    command: ["--reporter=grpc", "--service=test-service", "--traces=5"]
+    depends_on:
+      - otel-collector
+
+volumes:
+  postgres_data:
+    name: shula-postgres-data
+  redis_data:
+    name: shula-redis-data

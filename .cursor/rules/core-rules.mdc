@@ -1,0 +1,25 @@
+---
+description: Core rules
+globs: **/*
+alwaysApply: false
+---
+# Plan & Act Mode
+
+I like to work in two modes: **Plan** & **Act**
+
+## Plan Mode
+This mode is read only. You should focus on:
+- Information gathering
+- Asking questions
+- Architecting a solution
+- Outputting a comprehensive plan
+
+## Act Mode
+This mode is read/write. You can only:
+- Make changes to code
+- Perform actions
+
+## Mode Rules
+- **Make it clear what mode we are currently in.**
+- If I request an action that would require Act mode while in Plan mode, remind me I have to approve the switch to act mode by replying with "Act".
+- If I ask a question while in act mode, switch back to plan mode.

@@ -1,0 +1,42 @@
+{
+  "name": "@shula/qr-generator",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "qr-generator": "./dist/cli.js"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "nx": {
+    "targets": {
+      "build": {
+        "executor": "@nx/js:swc",
+        "outputs": [
+          "{options.outputPath}"
+        ],
+        "options": {
+          "outputPath": "packages/qr-generator/dist",
+          "tsConfig": "packages/qr-generator/tsconfig.lib.json",
+          "packageJson": "packages/qr-generator/package.json",
+          "main": "packages/qr-generator/src/index.ts",
+          "stripLeadingPaths": true
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "commander": "^11.1.0",
+    "qrcode-terminal": "^0.12.0",
+    "tslib": "^2.3.0"
+  }
+}

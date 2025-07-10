@@ -1,0 +1,11 @@
+node_modules
+dist
+tmp
+.nx
+.git
+.github
+.vscode
+*.md
+.env*
+.wwebjs_auth
+.wwebjs_cache

@@ -1,0 +1,25 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compileOnSave": false,
+  "files": [],
+  "references": [
+    {
+      "path": "./apps/backend"
+    },
+    {
+      "path": "./apps/whatsapp-container"
+    },
+    {
+      "path": "./packages/shared-queues"
+    },
+    {
+      "path": "./packages/nest-logger"
+    },
+    {
+      "path": "./packages/qr-generator"
+    },
+    {
+      "path": "./packages/observability"
+    }
+  ]
+}

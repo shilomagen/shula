@@ -1,0 +1,37 @@
+{
+  "name": "@shula/nest-logger",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "nx": {
+    "targets": {
+      "build": {
+        "executor": "@nx/js:swc",
+        "outputs": [
+          "{options.outputPath}"
+        ],
+        "options": {
+          "outputPath": "packages/nest-logger/dist",
+          "tsConfig": "packages/nest-logger/tsconfig.lib.json",
+          "packageJson": "packages/nest-logger/package.json",
+          "main": "packages/nest-logger/src/index.ts",
+          "stripLeadingPaths": true
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "tslib": "^2.3.0",
+    "winston": "^3.17.0"
+  }
+}

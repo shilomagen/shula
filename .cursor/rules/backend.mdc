@@ -1,0 +1,1036 @@
+---
+description: Rules for backend (NestJS application)
+globs: apps/**/*.*
+alwaysApply: false
+---
+---
+description: Rules for backend (NestJS application)
+globs: apps/**/*.*
+---
+# Backend Guidelines
+
+You are a senior backend NodeJS, Typescript engineer with experience in the NestJS framework and a preference for clean programming and design patterns.
+Generate code, corrections, and refactorings that comply with the basic principles and nomenclature.
+
+## Basic Principles
+
+- Use English for all code and documentation.
+- Always declare the type of each variable and function (parameters and return value).
+  - Avoid using any.
+  - Create necessary types.
+- Don't have inline comments for functions
+- Don't leave blank lines within a function.
+- One export per file.
+
+## Nomenclature
+
+- Use PascalCase for classes.
+- Use camelCase for variables, functions, and methods.
+- Use kebab-case for file and directory names.
+- Use UPPERCASE for environment variables.
+  - Avoid magic numbers and define constants.
+- Start each function with a verb.
+- Use verbs for boolean variables. Example: isLoading, hasError, canDelete, etc.
+- Use complete words instead of abbreviations and correct spelling.
+  - Except for standard abbreviations like API, URL, etc.
+  - Except for well-known abbreviations:
+    - i, j for loops
+    - err for errors
+    - ctx for contexts
+    - req, res, next for middleware function parameters
+
+## TypeScript
+
+- Prefer using interfaces over types.
+- Prefer using enums over strings.
+- Never use `any`.
+- Never use internal typings such as `Object<{id: string}>` but use a proper type.
+- **DO NOT use TypeScript casting with `as`**. Instead:
+  - Use type guards with `instanceof` or custom type predicates.
+  - Use generics where appropriate.
+  - Design your code to avoid the need for type casting.
+- Always enable strict TypeScript compiler options in `tsconfig.json`:
+  ```json
+  {
+    "compilerOptions": {
+      "strict": true,
+      "noImplicitAny": true,
+      "strictNullChecks": true,
+      "strictFunctionTypes": true,
+      "strictBindCallApply": true,
+      "strictPropertyInitialization": true,
+      "noImplicitThis": true,
+      "alwaysStrict": true,
+      "noUncheckedIndexedAccess": true,
+      "exactOptionalPropertyTypes": true
+    }
+  }
+  ```
+- Use `unknown` instead of `any` when the type is truly unknown, then use type narrowing.
+- Use nullish coalescing (`??`) and optional chaining (`?.`) instead of conditional checks.
+- Utilize TypeScript utility types like `Partial<T>`, `Required<T>`, `Readonly<T>`, `Pick<T, K>`, and `Omit<T, K>`.
+- Use discriminated unions for complex type relationships.
+- Include return type annotations on all functions, even when TypeScript can infer them.
+- Use branded types for primitives that have specific meaning (e.g., `type UserId = string & { readonly __brand: unique symbol }`).
+- Prefer `Record<K, T>` over `{ [key: string]: T }` for dictionary types.
+- Use `readonly` arrays and properties where appropriate to enforce immutability.
+- Prefer interfaces for public APIs and types for internal implementation details.
+- Make constructor parameters `private readonly` when they're only used to initialize class properties.
+- Use `const assertions` with `as const` for literal values that won't change.
+
+## TypeScript Advanced Patterns
+
+### Pattern Matching with ts-pattern
+
+- Use the `ts-pattern` library for type-safe pattern matching.
+- Prefer pattern matching over complex conditional logic.
+- Use pattern matching for handling discriminated unions and complex data structures.
+
+Installation:
+```bash
+npm install ts-pattern
+```
+
+Basic example:
+```typescript
+import { match, P } from 'ts-pattern';
+
+type Result<T> = 
+  | { status: 'success'; data: T }
+  | { status: 'error'; error: Error };
+
+function handleResult<T>(result: Result<T>): T | null {
+  return match(result)
+    .with({ status: 'success' }, ({ data }) => data)
+    .with({ status: 'error' }, ({ error }) => {
+      console.error(error);
+      return null;
+    })
+    .exhaustive(); // Ensures all cases are handled
+}
+```
+
+Advanced example with API responses:
+```typescript
+import { match, P } from 'ts-pattern';
+
+type ApiResponse<T> = 
+  | { status: 'loading' }
+  | { status: 'success'; data: T }
+  | { status: 'error'; error: { message: string; code: number } };
+
+function processUserResponse(response: ApiResponse<User>): string {
+  return match(response)
+    .with({ status: 'loading' }, () => 'Loading user data...')
+    .with({ status: 'success', data: P.select() }, (user) => `Hello, ${user.name}!`)
+    .with({ status: 'error', error: { code: 404 } }, () => 'User not found')
+    .with({ status: 'error', error: { code: P.number } }, ({ error }) => 
+      `Error ${error.code}: ${error.message}`
+    )
+    .exhaustive();
+}
+```
+
+When to use ts-pattern:
+- For handling state machines or complex workflows
+- When dealing with nested conditional logic
+- For processing discriminated unions
+- When handling different API response types
+
+### Discriminated Unions and Type Safety
+
+- Use discriminated unions to create type-safe, self-documenting code.
+- **Prefer enums over string literals for type discriminants**.
+- Always include a "type" or "kind" field to distinguish between variants.
+- Let TypeScript's type narrowing do the heavy lifting for you.
+
+Example of a well-designed discriminated union with enums:
+
+```typescript
+// Define the event type enum
+enum UserEventType {
+  CREATED = 'CREATED',
+  UPDATED = 'UPDATED',
+  DELETED = 'DELETED'
+}
+
+// Define separate interfaces for each variant
+interface UserCreatedEvent {
+  type: UserEventType.CREATED;
+  userId: string;
+  timestamp: Date;
+}
+
+interface UserUpdatedEvent {
+  type: UserEventType.UPDATED;
+  userId: string;
+  fields: string[];
+  timestamp: Date;
+}
+
+interface UserDeletedEvent {
+  type: UserEventType.DELETED;
+  userId: string;
+  reason?: string;
+  timestamp: Date;
+}
+
+// Combine them into a union type
+type UserEvent = UserCreatedEvent | UserUpdatedEvent | UserDeletedEvent;
+
+// TypeScript can narrow types based on the discriminant
+function handleUserEvent(event: UserEvent): void {
+  // Common properties are always accessible
+  console.log(`Event for user ${event.userId} at ${event.timestamp}`);
+  
+  // Type-specific handling with full type safety
+  switch (event.type) {
+    case UserEventType.CREATED:
+      // TypeScript knows this is UserCreatedEvent
+      console.log('New user created');
+      break;
+    case UserEventType.UPDATED:
+      // TypeScript knows this is UserUpdatedEvent
+      console.log(`Updated fields: ${event.fields.join(', ')}`);
+      break;
+    case UserEventType.DELETED:
+      // TypeScript knows this is UserDeletedEvent
+      console.log(`Deletion reason: ${event.reason || 'Not specified'}`);
+      break;
+  }
+}
+```
+
+Benefits of this approach:
+- Type safety - TypeScript ensures you handle all variants
+- Self-documenting - Each variant is clearly defined
+- Maintainable - Adding a new variant forces you to update handlers
+- Runtime safety - The discriminant field provides clarity at runtime
+- Better IDE support - Enums provide autocompletion and refactoring support
+- Centralized definition - Event types are defined in one place
+
+Guidelines for discriminated unions:
+- Always use enums instead of string literals for discriminants.
+- Put the enum in the same file or module as the related interfaces.
+- Use for representing different states of data.
+- Use for safely handling variants of a data structure.
+- Always include exhaustive checks to catch missing handlers.
+- Use with pattern matching from ts-pattern for cleaner code.
+
+## Functional Programming
+
+- Prefer immutable programming patterns.
+- **Never use `let`**. Use `const` exclusively.
+- Use array methods like `.map()`, `.filter()`, `.reduce()`, and `.find()` instead of loops.
+- Avoid mutating data; create new objects/arrays instead.
+- Use pure functions whenever possible (no side effects, same output for same input).
+
+```typescript
+// ❌ BAD: Using let and mutations
+function calculateTotalPrice(items: Item[]): number {
+  let total = 0;
+  for (let i = 0; i < items.length; i++) {
+    total += items[i].price * items[i].quantity;
+  }
+  return total;
+}
+
+// ✅ GOOD: Using reduce and const
+function calculateTotalPrice(items: Item[]): number {
+  return items.reduce(
+    (total, item) => total + item.price * item.quantity, 
+    0
+  );
+}
+```
+
+```typescript
+// ❌ BAD: Mutating arrays
+function addItemToCart(cart: Cart, item: Item): void {
+  cart.items.push(item);
+  cart.totalItems += 1;
+}
+
+// ✅ GOOD: Creating new immutable objects
+function addItemToCart(cart: Cart, item: Item): Cart {
+  return {
+    ...cart,
+    items: [...cart.items, item],
+    totalItems: cart.totalItems + 1
+  };
+}
+```
+
+### Functional Programming Guidelines
+
+1. **Use array methods over loops**
+   ```typescript
+   // Instead of for loops
+   const activeUsers = users.filter(user => user.isActive);
+   const userNames = users.map(user => user.name);
+   const usersByRole = users.reduce((acc, user) => {
+     acc[user.role] = acc[user.role] || [];
+     acc[user.role].push(user);
+     return acc;
+   }, {} as Record<string, User[]>);
+   ```
+
+2. **Use optional chaining and nullish coalescing**
+   ```typescript
+   // Instead of if-checks
+   const userName = user?.profile?.name ?? 'Anonymous';
+   ```
+
+3. **Use destructuring for function parameters**
+   ```typescript
+   function processUser({ id, name, email }: User): void {
+     // Implementation
+   }
+   ```
+
+4. **Use early returns to avoid nested conditionals**
+   ```typescript
+   function processPayment(payment: Payment): Result {
+     if (!payment.verified) {
+       return { success: false, error: 'Payment not verified' };
+     }
+     
+     if (payment.amount <= 0) {
+       return { success: false, error: 'Invalid amount' };
+     }
+     
+     // Process payment logic
+     return { success: true };
+   }
+   ```
+
+5. **Use composition over inheritance**
+   ```typescript
+   // Instead of inheritance hierarchies
+   const withLogging = (service: Service) => ({
+     ...service,
+     execute: async (params: Params) => {
+       console.log('Executing service with params:', params);
+       const result = await service.execute(params);
+       console.log('Service returned:', result);
+       return result;
+     }
+   });
+   
+   const loggableUserService = withLogging(userService);
+   ```
+
+## Function Parameters
+
+- Avoid "parameter hell" with too many function parameters.
+- Use parameter objects for functions with more than 2 parameters.
+- **Always define explicit interface/type for parameter objects.**
+- Use destructuring to access parameters within the function.
+
+```typescript
+// ❌ BAD: Too many parameters
+function createUser(
+  firstName: string,
+  lastName: string,
+  email: string,
+  password: string,
+  age: number,
+  isAdmin: boolean
+): User {
+  // Implementation
+}
+
+// ✅ GOOD: Parameter object with explicit interface
+interface CreateUserParams {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  age: number;
+  isAdmin: boolean;
+}
+
+function createUser(params: CreateUserParams): User {
+  const { firstName, lastName, email, password, age, isAdmin } = params;
+  // Implementation
+}
+```
+
+### Parameter Object Guidelines
+
+1. **Name parameter interfaces with descriptive names**
+   - Use `[FunctionName]Params` naming convention for consistency.
+   - Example: `CreateUserParams`, `UpdatePostParams`, `SearchOptions`.
+
+2. **Use readonly properties for parameter objects**
+   ```typescript
+   interface SendEmailParams {
+     readonly recipient: string;
+     readonly subject: string;
+     readonly body: string;
+     readonly attachments?: readonly string[];
+   }
+   ```
+
+3. **Use optional properties for optional parameters**
+   ```typescript
+   interface SearchParams {
+     query: string;
+     page?: number;
+     limit?: number;
+     sortBy?: string;
+     sortDirection?: 'asc' | 'desc';
+   }
+   ```
+
+4. **For simple two-parameter functions, direct parameters are acceptable**
+   ```typescript
+   // This is fine for simple cases
+   function getUserById(id: string, includeDeleted: boolean = false): Promise<User | null> {
+     // Implementation
+   }
+   ```
+
+## Type Definitions
+
+- **Never use inline types.** Always define separate interfaces or types.
+- Place type definitions in a separate file or at the top of the file.
+- Use descriptive names for types.
+- Export types that are used outside the current file.
+
+```typescript
+// ❌ BAD: Inline types
+function updateUser(
+  id: string, 
+  userData: { name?: string; email?: string; role?: string }
+): Promise<{ success: boolean; user?: { id: string; name: string; email: string } }> {
+  // Implementation
+}
+
+// ✅ GOOD: Separate type definitions
+interface UpdateUserData {
+  name?: string;
+  email?: string;
+  role?: string;
+}
+
+interface UpdateUserResult {
+  success: boolean;
+  user?: User;
+}
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
+function updateUser(
+  id: string,
+  userData: UpdateUserData
+): Promise<UpdateUserResult> {
+  // Implementation
+}
+```
+
+### Type Definition Guidelines
+
+1. **Organize related types together**
+   - Group related types in the same file.
+   - Use a `types.ts` file in each module for module-specific types.
+   - Use a common `types.ts` for shared types.
+
+2. **Use interfaces for objects and type aliases for unions and primitives**
+   ```typescript
+   // Interface for objects
+   interface User {
+     id: string;
+     name: string;
+   }
+   
+   // Type alias for unions
+   type Status = 'pending' | 'approved' | 'rejected';
+   
+   // Type alias for complex types
+   type UserId = string & { readonly __brand: unique symbol };
+   ```
+
+3. **Use consistent naming conventions**
+   - `EntityParams` for function parameters
+   - `EntityResponse` for API responses
+   - `EntityDto` for data transfer objects
+
+4. **Export types used across files**
+   ```typescript
+   // In user/types.ts
+   export interface User {
+     id: string;
+     name: string;
+   }
+   
+   export interface CreateUserParams {
+     name: string;
+     email: string;
+     password: string;
+   }
+   ```
+
+5. **Use composition to build complex types**
+   ```typescript
+   // Compose types for more complex structures
+   interface BaseEntity {
+     id: string;
+     createdAt: Date;
+     updatedAt: Date;
+   }
+   
+   interface User extends BaseEntity {
+     name: string;
+     email: string;
+   }
+   ```
+
+## Functions / Methods
+
+- Write short functions with a single purpose. Less than 20 instructions.
+- Name functions with a verb and something else.
+  - If it returns a boolean, use isX or hasX, canX, etc.
+  - If it doesn't return anything, use executeX or saveX, etc.
+- Avoid nesting blocks by:
+  - Early checks and returns.
+  - Extraction to utility functions.
+- Use default parameter values instead of checking for null or undefined.
+- Use a single level of abstraction.
+
+## Simplicity Guidelines
+
+- **Prefer simplicity over complexity** - Write code that is easy to understand at first glance.
+- **Avoid over-engineering** - Don't add layers of abstraction unless there's a clear benefit.
+- **Do not over-generalize** - Create specific solutions for specific problems unless generalization is explicitly required.
+- **Minimize indirection** - Each level of indirection adds cognitive load; keep it to a minimum.
+- **Avoid premature optimization** - Focus on writing clear, correct code first. Optimize only when necessary and based on measurements.
+
+### Anti-patterns to Avoid
+
+❌ **Excessive Abstraction**
+```typescript
+// Too abstract and complex
+class EntityRepository<T extends BaseEntity, ID extends string | number> {
+  private entityManager: EntityManager<T>;
+  private queryBuilder: QueryBuilder<T>;
+  private transformer: EntityTransformer<T, EntityDTO<T>>;
+  
+  async findById(id: ID): Promise<Optional<EntityDTO<T>>> {
+    // Complex implementation with multiple layers
+  }
+}
+```
+
+✅ **Clear and Direct**
+```typescript
+// Simple and specific
+class UserRepository {
+  constructor(private db: Database) {}
+  
+  async findById(id: string): Promise<User | null> {
+    return this.db.query('SELECT * FROM users WHERE id = $1', [id]);
+  }
+}
+```
+
+### Guidelines for Simplicity
+
+1. **Write for humans first, computers second**
+   - Code is read more than it's written. Optimize for readability.
+   - Use clear, descriptive names that reveal intent.
+
+2. **Favor explicit over implicit**
+   - Make dependencies explicit in function signatures.
+   - Avoid "magic" behavior that happens behind the scenes.
+
+3. **Minimize dependencies**
+   - Every dependency is a liability. Add dependencies only when necessary.
+   - Use built-in language features when possible.
+
+4. **Follow the Rule of Three**
+   - Don't generalize code until you have at least three specific use cases.
+   - Wait for patterns to emerge before introducing abstractions.
+
+5. **Keep functions focused**
+   - Each function should do one thing well.
+   - Functions should be short and focused on a single responsibility.
+
+6. **Avoid unnecessary wrappers**
+   - Don't create wrapper classes or functions that add no real value.
+   - If a wrapper only forwards calls to another object, consider using the object directly.
+
+### Practical Examples
+
+✅ **Simple and Clear**
+```typescript
+// Direct and straightforward
+export class UserService {
+  constructor(private readonly db: Database) {}
+
+  async getUserById(id: string): Promise<User | null> {
+    const user = await this.db.query('SELECT * FROM users WHERE id = $1', [id]);
+    if (!user) {
+      return null;
+    }
+    
+    // Transform directly without unnecessary mapper class
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      // Only include properties needed by clients
+    };
+  }
+}
+```
+
+### Decision Making for Simplicity
+
+When faced with design decisions, ask yourself:
+
+1. **Is this abstraction necessary right now?**
+   - If not, postpone it until it's clearly needed.
+
+2. **Will this code be easier to understand in 6 months?**
+   - If not, simplify it.
+
+3. **Does this pattern solve more problems than it creates?**
+   - If not, choose a simpler approach.
+
+4. **Is there a simpler way to achieve the same result?**
+   - Always prefer the simplest solution that works.
+
+5. **Does this code follow the principle of least surprise?**
+   - Code should behave as other developers would expect.
+
+Remember: The best code is often the code you don't write. Fewer lines of code mean fewer bugs, less maintenance, and easier understanding.
+
+## Data
+
+- Don't abuse primitive types and encapsulate data in composite types.
+- Avoid data validations in functions and use classes with internal validation.
+- Prefer immutability for data.
+  - Use readonly for data that doesn't change.
+  - Use as const for literals that don't change.
+
+## Classes
+
+- Follow SOLID principles.
+- Prefer composition over inheritance.
+- Declare interfaces to define contracts.
+- Write small classes with a single purpose.
+  - Less than 200 instructions.
+  - Less than 10 public methods.
+  - Less than 10 properties.
+
+## API Design
+
+### REST Principles
+- Follow REST best practices for API design:
+  - Use resource-oriented URLs (nouns, not verbs).
+  - Use HTTP methods appropriately:
+    - GET: Retrieve resources (idempotent).
+    - POST: Create new resources.
+    - PUT: Update resources (complete replacement, idempotent).
+    - PATCH: Partial update of resources.
+    - DELETE: Remove resources.
+  - Use plural nouns for collections (e.g., `/users`, not `/user`).
+  - Use nested resources for relationships (e.g., `/users/{id}/posts`).
+  - Keep URLs consistent across the application.
+
+### API Versioning
+- Include API version in the URL path (e.g., `/api/v1/users`).
+- Document API changes between versions.
+
+### API Response Standards
+- Use consistent HTTP status codes:
+  - 200: Success (GET, PUT, PATCH)
+  - 201: Created (POST)
+  - 204: No Content (DELETE)
+  - 400: Bad Request
+  - 401: Unauthorized
+  - 403: Forbidden
+  - 404: Not Found
+  - 500: Internal Server Error
+- Return appropriate error messages with status codes.
+- Implement pagination for collection endpoints:
+  - Use limit/offset or page/size query parameters.
+  - Include metadata about pagination (total items, total pages, etc.).
+
+### API Security
+- Use JWT for authentication.
+- Apply rate limiting to prevent abuse.
+- Implement proper CORS configuration.
+- Validate all input data against XSS and injection attacks.
+
+## Swagger Configuration
+
+- Use `@nestjs/swagger` for API documentation.
+- Configure Swagger at the application bootstrap:
+
+```typescript
+const options = new DocumentBuilder()
+  .setTitle('API Documentation')
+  .setDescription('API documentation for the application')
+  .setVersion('1.0')
+  .addBearerAuth()
+  .build();
+const document = SwaggerModule.createDocument(app, options);
+SwaggerModule.setup('api/docs', app, document);
+```
+
+### Swagger Decorators
+- Document controllers with `@ApiTags(tag)`.
+- Document operations with `@ApiOperation({ summary, description, operationId })`.
+- Include `operationId` for all endpoints (unique identifier for each operation).
+- Document responses with `@ApiResponse({ status, description, type })`.
+- Document request parameters with:
+  - `@ApiParam()` for path parameters.
+  - `@ApiQuery()` for query parameters.
+  - `@ApiBody()` for request body.
+- Document security requirements with `@ApiBearerAuth()`.
+- Document schemas with `@ApiProperty()` in DTOs.
+
+Example:
+```typescript
+@ApiTags('users')
+@Controller('users')
+export class UsersController {
+  @Get()
+  @ApiOperation({
+    summary: 'Get all users',
+    description: 'Retrieve a list of all users',
+    operationId: 'getAllUsers'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of users',
+    type: [UserResponseDto]
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    description: 'Page number'
+  })
+  getAllUsers(): Promise<UserResponseDto[]> {
+    // Implementation
+  }
+}
+```
+
+## Data Transfer Objects (DTOs)
+
+### DTO Structure
+- Create separate DTOs for request and response.
+- Organize DTOs by feature module.
+- Follow naming conventions:
+  - Request: `Create{Entity}Dto`, `Update{Entity}Dto`
+  - Response: `{Entity}ResponseDto`
+- Use inheritance for shared properties between DTOs.
+
+### DTO Validation
+- Use `class-validator` for validation.
+- Use `class-transformer` for transformation.
+- Apply validation pipes globally.
+- Document validation rules in Swagger using decorators.
+
+Example:
+```typescript
+export class CreateUserDto {
+  @ApiProperty({
+    description: 'User email',
+    example: 'john.doe@example.com'
+  })
+  @IsEmail()
+  @IsNotEmpty()
+  readonly email: string;
+
+  @ApiProperty({
+    description: 'User password',
+    example: 'password123',
+    minLength: 8
+  })
+  @IsString()
+  @MinLength(8)
+  @IsNotEmpty()
+  readonly password: string;
+}
+```
+
+### Entity-DTO Separation
+
+- Create clear separation between database entities and DTOs.
+- Never expose database entities directly in API responses.
+- Create mappers for converting between entities and DTOs.
+
+## Domain Objects vs DTOs
+
+### Domain Objects
+- Represent the database schema.
+- Include relationships, indexes, and database-specific metadata.
+- Should not be exposed directly to the API.
+- Named as singular nouns (e.g., `User`, `Post`).
+
+Example:
+```typescript
+@Entity()
+export class User {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ unique: true })
+  email: string;
+
+  @Column()
+  passwordHash: string;
+
+  @Column()
+  salt: string;
+
+  @OneToMany(() => Post, post => post.author)
+  posts: Post[];
+}
+```
+
+### Mappers
+- Create mappers in each module to convert between entities and DTOs.
+- Follow naming convention: `{Entity}Mapper`.
+- Implement `toDto()` and `toEntity()` methods.
+
+Example:
+```typescript
+@Injectable()
+export class UserMapper {
+  toDto(user: User): UserResponseDto {
+    return {
+      id: user.id,
+      email: user.email,
+      createdAt: user.createdAt
+    };
+  }
+
+  toEntity(createUserDto: CreateUserDto): Partial<User> {
+    return {
+      email: createUserDto.email,
+      // Other properties
+    };
+  }
+}
+```
+
+## Exceptions
+
+- Use exceptions to handle errors you don't expect.
+- If you catch an exception, it should be to:
+  - Fix an expected problem.
+  - Add context.
+  - Otherwise, use a global handler.
+- Create custom exception filters for different error types.
+
+## Testing
+
+### Testing Approach
+- Write unit tests using Jest.
+- On NestJS project, prefer integration tests over unit tests.
+- Write tests that read like a manual: clearly setup, execute, and verify.
+- Each test should be independent and not rely on other tests.
+
+### Driver Pattern
+- Use driver design pattern for testing:
+  - `driver.given.<method>` - setup the scenario with preconditions
+  - `driver.when.<method>` - execute the action being tested
+  - `driver.get.<method>` - retrieve data for assertions
+- Create a specific test driver for each module or key component.
+- Keep driver implementation simple and focused on test readability.
+
+### Fixtures
+- Create fixtures for all entities to generate valid test data.
+- Use faker.js to generate realistic random data.
+- Make fixtures overridable for test-specific data requirements.
+- Structure fixtures as static classes with clear methods.
+
+Example of a proper fixture:
+```typescript
+import { faker } from '@faker-js/faker';
+import { merge } from 'lodash';
+import { User } from '@prisma/client';
+
+export class UserFixture {
+  static valid(overrides: Partial<User> = {}): User {
+    const defaultUser: User = {
+      id: faker.string.uuid(),
+      email: faker.internet.email(),
+      firstName: faker.person.firstName(),
+      lastName: faker.person.lastName(),
+      createdAt: faker.date.recent(),
+      updatedAt: faker.date.recent(),
+      isActive: true,
+    };
+
+    return merge({}, defaultUser, overrides);
+  }
+  
+  static invalid(): Partial<User> {
+    return {
+      email: 'invalid-email',
+    };
+  }
+}
+```
+
+### Test Structure
+- Structure tests clearly with setup, execution, and assertion phases.
+- Use descriptive test names that explain the behavior being tested.
+- Group related tests using describe blocks.
+
+Example of a proper test:
+```typescript
+describe('UserService', () => {
+  describe('removeUser', () => {
+    it('should remove an existing user', async () => {
+      // Setup with fixture
+      const user = UserFixture.valid();
+      await driver.given.user(user);
+      
+      // Execute action
+      await driver.when.removeUser(user.id);
+      
+      // Assert with specific expectations
+      await expect(() => driver.get.userById(user.id))
+        .rejects
+        .toThrow(NotFoundException);
+    });
+  });
+});
+```
+
+### Assertions
+- Prefer `toMatchObject` for object comparison to improve readability.
+- Prefer single assertions that validate multiple properties at once.
+- Avoid multiple single-property assertions when possible.
+
+Preferred:
+```typescript
+expect(result).toMatchObject<User>({
+  email: 'test@example.com',
+  isActive: true,
+  firstName: 'John'
+});
+```
+
+Instead of:
+```typescript
+expect(result.email).toBe('test@example.com');
+expect(result.isActive).toBe(true);
+expect(result.firstName).toBe('John');
+```
+
+### Mocking
+- Use Jest mocks for external dependencies.
+- Only mock what is necessary for the test.
+- Clearly name mocked variables (e.g., `mockUserRepository`).
+- Reset mocks between tests to ensure test isolation.
+
+### Integration Tests
+- Create a separate testing module for integration tests.
+- Use in-memory databases when possible for integration tests.
+- Test the full request/response flow, including validation.
+- Test both success and error cases.
+
+## NestJS Architecture
+
+### Basic Principles
+  
+- Use modular architecture.
+- Encapsulate the API in modules.
+  - One module per main domain/route.
+  - Use flattened file structure within each module:
+    - `module-name.module.ts` - Module definition
+    - `module-name.controller.ts` - Controller for main route
+    - `module-name.service.ts` - Service implementation
+    - `module-name.repository.ts` - Repository for data access
+    - `module-name.entity.ts` - Database entity
+    - `module-name.mapper.ts` - Entity-DTO mapper
+    - `module-name.types.ts` - Module-specific types
+  - A `dto` folder for data transfer objects:
+    - DTOs validated with class-validator for inputs.
+    - Declare simple types for outputs.
+  - One service per entity.
+  
+### Common Module
+- Create a common module (e.g., `@app/common`) for shared, reusable code across the application.
+  - This module should include:
+    - Configs: Global configuration settings.
+    - Swagger documentation: Shared swagger configuration.
+    - Decorators: Custom decorators for reusability.
+    - DTOs: Common data transfer objects.
+    - Guards: Guards for role-based or permission-based access control.
+    - Interceptors: Shared interceptors for request/response manipulation.
+    - Notifications: Modules for handling app-wide notifications.
+    - Services: Services that are reusable across modules.
+    - Types: Common TypeScript types or interfaces.
+    - Utils: Helper functions and utilities.
+    - Validators: Custom validators for consistent input validation.
+  
+### Core Module Functionalities
+- Global filters for exception handling.
+- Global middlewares for request management.
+- Guards for permission management.
+- Interceptors for request processing.
+
+## Project Structure Example
+
+```
+src/
+├── main.ts                           # Application entry point
+├── app.module.ts                     # Root module
+├── common/                           # Common module
+│   ├── config/                       # Configuration
+│   │   └── app.config.ts             # App configuration
+│   ├── decorators/                   # Custom decorators
+│   │   └── role.decorator.ts         # Role decorator example
+│   ├── dtos/                         # Shared DTOs
+│   │   └── pagination.dto.ts         # Pagination DTO example
+│   ├── filters/                      # Exception filters
+│   │   └── http-exception.filter.ts  # HTTP exception filter
+│   ├── guards/                       # Guards
+│   │   └── auth.guard.ts             # Auth guard example
+│   ├── interceptors/                 # Interceptors
+│   │   └── transform.interceptor.ts  # Transform interceptor
+│   ├── middlewares/                  # Middlewares
+│   │   └── logger.middleware.ts      # Logger middleware
+│   ├── services/                     # Shared services
+│   │   └── logger.service.ts         # Logger service
+│   ├── types/                        # Shared types
+│   │   └── common.types.ts           # Common types
+│   └── utils/                        # Utility functions
+│       └── date.utils.ts             # Date utilities
+├── modules/                          # Feature modules
+│   ├── users/                        # Users module
+│   │   ├── users.module.ts           # Module definition
+│   │   ├── users.controller.ts       # Controller
+│   │   ├── users.service.ts          # Service
+│   │   ├── users.repository.ts       # Repository
+│   │   ├── users.entity.ts           # Database entity
+│   │   ├── users.mapper.ts           # Entity-DTO mapper
+│   │   ├── users.types.ts            # Module-specific types
+│   │   ├── dto/                      # DTOs folder
+│   │   │   ├── create-user.dto.ts    # Create user DTO
+│   │   │   ├── update-user.dto.ts    # Update user DTO
+│   │   │   └── user-response.dto.ts  # User response DTO
+│   │   └── tests/                    # Tests folder
+│   │       ├── users.controller.spec.ts # Controller tests
+│   │       └── users.service.spec.ts    # Service tests
+│   └── [other-modules]/              # Other feature modules with same structure
+└── database/                         # Database configuration
+    ├── database.module.ts            # Database module
+    └── migrations/                   # Database migrations
+```
+
+

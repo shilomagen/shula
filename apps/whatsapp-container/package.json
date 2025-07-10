@@ -1,0 +1,87 @@
+{
+  "name": "@shula/whatsapp-container",
+  "version": "0.0.1",
+  "private": true,
+  "nx": {
+    "name": "whatsapp-container",
+    "projectType": "application",
+    "sourceRoot": "apps/whatsapp-container/src",
+    "targets": {
+      "build": {
+        "executor": "@nx/webpack:webpack",
+        "options": {
+          "webpackConfig": "{projectRoot}/webpack.config.js",
+          "outputPath": "{workspaceRoot}/dist/apps/{projectName}"
+        },
+        "dependsOn": [
+          "^build"
+        ],
+        "defaultConfiguration": "development",
+        "configurations": {
+          "development": {
+            "watch": true,
+            "optimization": false,
+            "generatePackageJson": true,
+            "extractLicenses": false,
+            "inspect": true
+          },
+          "production": {
+            "optimization": true,
+            "extractLicenses": true,
+            "generatePackageJson": true,
+            "inspect": false
+          }
+        }
+      },
+      "serve": {
+        "executor": "@nx/js:node",
+        "defaultConfiguration": "development",
+        "dependsOn": [
+          "build"
+        ],
+        "options": {
+          "buildTarget": "whatsapp-container:build",
+          "runBuildTargetDependencies": false,
+          "watch": true,
+          "inspect": true
+        },
+        "configurations": {
+          "development": {
+            "watch": true,
+            "buildTarget": "whatsapp-container:build:development"
+          },
+          "production": {
+            "buildTarget": "whatsapp-container:build:production"
+          }
+        }
+      },
+      "test": {
+        "options": {
+          "passWithNoTests": true
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.758.0",
+    "@nestjs/common": "10.4.15",
+    "@nestjs/config": "4.0.1",
+    "@nestjs/core": "10.4.15",
+    "@nestjs/event-emitter": "3.0.1",
+    "@nestjs/platform-express": "10.4.15",
+    "@shula/observability": "*",
+    "@shula/shared-queues": "*",
+    "class-transformer": "0.5.1",
+    "class-validator": "0.14.1",
+    "nestjs-otel": "^6.0.0",
+    "nestjs-pino": "^4.0.0",
+    "pino-pretty": "^11.0.0",
+    "qrcode-terminal": "0.12.0",
+    "redis": "^4.6.13",
+    "reflect-metadata": "0.1.14",
+    "rxjs": "7.8.2",
+    "uuid": "^9.0.1",
+    "whatsapp-web.js": "1.27.0",
+    "wwebjs-aws-s3": "1.0.2"
+  }
+}

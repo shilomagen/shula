@@ -1,0 +1,5 @@
+# Ignore standalone Next.js app
+webapps/admin
+
+# Ignore non-existent directory
+packages/http-client 

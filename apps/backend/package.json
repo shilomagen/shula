@@ -1,0 +1,135 @@
+{
+  "name": "@shula/backend",
+  "version": "0.0.1",
+  "private": true,
+  "nx": {
+    "name": "backend",
+    "projectType": "application",
+    "sourceRoot": "apps/backend/src",
+    "targets": {
+      "build": {
+        "executor": "@nx/webpack:webpack",
+        "options": {
+          "webpackConfig": "{projectRoot}/webpack.config.js",
+          "outputPath": "{workspaceRoot}/dist/apps/{projectName}",
+          "watch": false
+        },
+        "defaultConfiguration": "development",
+        "dependsOn": [
+          "^build"
+        ],
+        "configurations": {
+          "development": {
+            "optimization": false,
+            "generatePackageJson": true,
+            "extractLicenses": false,
+            "inspect": true,
+            "watch": true
+          },
+          "production": {
+            "watch": false,
+            "optimization": true,
+            "extractLicenses": true,
+            "generatePackageJson": true,
+            "inspect": false
+          }
+        }
+      },
+      "serve": {
+        "executor": "@nx/js:node",
+        "defaultConfiguration": "development",
+        "dependsOn": [
+          "^build"
+        ],
+        "options": {
+          "buildTarget": "backend:build",
+          "runBuildTargetDependencies": true,
+          "watch": true,
+          "inspect": true,
+          "buildTargetOptions": {
+            "watch": true
+          },
+          "args": [],
+          "port": 9229
+        },
+        "configurations": {
+          "development": {
+            "buildTarget": "backend:build:development",
+            "buildTargetOptions": {
+              "watch": true
+            }
+          },
+          "production": {
+            "buildTarget": "backend:build:production",
+            "buildTargetOptions": {
+              "watch": false
+            }
+          }
+        }
+      },
+      "test": {
+        "options": {
+          "passWithNoTests": true
+        }
+      },
+      "generate-api-types": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "openapi-generator generate -i http://localhost:3000/swagger/yaml -g typescript-axios -o {projectRoot}/test/generated-client --additional-properties=withSeparateModelsAndApi=true,apiPackage=api,modelPackage=models,withInterfaces=true,withNodeImports=true"
+        }
+      },
+      "test-e2e": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "cd apps/backend && ./scripts/run-e2e-tests.sh"
+        }
+      },
+      "docker-build": {
+        "dependsOn": [
+          "build"
+        ],
+        "command": "docker build -f apps/backend/Dockerfile . -t backend"
+      }
+    }
+  },
+  "scripts": {
+    "test:e2e": "NODE_ENV=test TS_NODE_PROJECT=./test/tsconfig.e2e.json npx jest --config ./test/jest-e2e.config.ts --runInBand",
+    "test:e2e:run": "./scripts/run-e2e-tests.sh",
+    "test:e2e:down": "./scripts/run-e2e-tests-down.sh",
+    "test:e2e:ci": "./scripts/run-e2e-tests-ci.sh",
+    "test:spec": "jest --config ./test/jest.config.ts",
+    "migrate": "ts-node src/migrations/runner.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-rekognition": "3.758.0",
+    "@nestjs/common": "10.4.15",
+    "@nestjs/config": "4.0.1",
+    "@nestjs/core": "10.4.15",
+    "@nestjs/platform-express": "10.4.15",
+    "@nestjs/swagger": "8.1.1",
+    "@prisma/client": "6.4.1",
+    "@shula/nest-logger": "*",
+    "@shula/observability": "*",
+    "@shula/shared-queues": "*",
+    "axios": "1.8.1",
+    "body-parser": "1.20.3",
+    "class-transformer": "0.5.1",
+    "class-validator": "0.14.1",
+    "express": "4.21.2",
+    "langfuse": "^3.35.2",
+    "nest-winston": "^1.10.2",
+    "openai": "4.86.1",
+    "prisma": "6.4.1",
+    "reflect-metadata": "0.1.14",
+    "rxjs": "7.8.2",
+    "sharp": "0.33.5",
+    "terser-webpack-plugin": "5.3.12",
+    "uuid": "9.0.1",
+    "webpack": "5.98.0"
+  },
+  "devDependencies": {
+    "@faker-js/faker": "^9.6.0",
+    "@types/node": "^22.14.0",
+    "lodash": "^4.17.21"
+  }
+}

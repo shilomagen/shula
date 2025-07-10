@@ -1,0 +1,238 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'apps/**'
+      - 'webapps/admin/**'
+      - 'libs/**'
+      - 'package.json'
+      - 'nx.json'
+  pull_request:
+    paths:
+      - 'apps/**'
+      - 'webapps/admin/**'
+      - 'libs/**'
+      - 'package.json'
+      - 'nx.json'
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write  # Required for AWS authentication
+
+# Required secrets:
+# - AWS_REGION: The AWS region where resources are deployed
+# - AWS_GITHUB_ACTIONS_ROLE_ARN: The ARN of the IAM OIDC role created in Terraform 
+#   (arn:aws:iam::<account-id>:role/github-actions-shula-role)
+# - SENTRY_AUTH_TOKEN: Token for Sentry error tracking
+
+jobs:
+  # Paths filter job
+  paths-filter:
+    uses: ./.github/workflows/paths-filter.yml
+
+  # Common setup and NX affected analysis
+  nx-affected-analysis:
+    needs: paths-filter
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    outputs:
+      affected_projects: ${{ steps.affected-projects.outputs.affected_projects }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        id: npm-cache
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        if: steps.npm-cache.outputs.cache-hit != 'true'
+        run: npm ci --legacy-peer-deps
+
+      - name: Set up Nx affected SHA
+        uses: nrwl/nx-set-shas@v4
+        with:
+          main-branch-name: main
+
+      - name: Generate prisma client
+        run: npm run db:generate
+
+      - name: Get affected projects
+        id: affected-projects
+        run: |
+          AFFECTED=$(npx nx show projects --affected --type=app)
+          # Convert the output to a JSON string format for GitHub Actions
+          AFFECTED_JSON=$(echo "$AFFECTED" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "affected_projects=${AFFECTED_JSON}" >> $GITHUB_OUTPUT
+
+  # Run NX affected lint and test
+  nx-affected-quality:
+    needs: nx-affected-analysis
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Restore cached dependencies
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+
+      - name: Set up Nx affected SHA
+        uses: nrwl/nx-set-shas@v4
+        with:
+          main-branch-name: main
+
+      - name: Lint and test affected projects
+        run: |
+          npx nx affected --target=lint,test --parallel=5 --skip-nx-cache=false
+
+  # Build and deploy affected services
+  build-and-deploy:
+    needs: [nx-affected-quality, paths-filter]
+    if: github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[skip ci]')
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: ['backend', 'whatsapp-container', 'admin']
+        include:
+          - app: 'backend'
+            dockerfile: './apps/backend/Dockerfile'
+            context: '.'
+            image: 'shula-backend'
+            path_filter_name: 'backend_files'
+          - app: 'whatsapp-container'
+            dockerfile: './apps/whatsapp-container/Dockerfile'
+            context: '.'
+            image: 'shula-whatsapp-container'
+            path_filter_name: 'whatsapp_files'
+            platforms: 'linux/amd64'
+          - app: 'admin'
+            dockerfile: './webapps/admin/Dockerfile'
+            context: './webapps/admin'
+            image: 'shula-admin'
+            path_filter_name: 'admin_files'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Restore/Install dependencies
+        uses: actions/cache@v3
+        id: npm-cache
+        with:
+          path: ${{ matrix.app == 'admin' && 'webapps/admin/node_modules' || 'node_modules' }}
+          key: ${{ runner.os }}-node-${{ matrix.app == 'admin' && 'admin-' || '' }}${{ hashFiles(matrix.app == 'admin' && 'webapps/admin/package-lock.json' || '**/package-lock.json') }}
+
+      - name: Install dependencies
+        if: steps.npm-cache.outputs.cache-hit != 'true'
+        working-directory: ${{ matrix.app == 'admin' && 'webapps/admin' || '.' }}
+        run: npm ci ${{ matrix.app != 'admin' && '--legacy-peer-deps' || '' }}
+        
+      - name: Generate Prisma Client
+        if: matrix.app != 'admin'
+        run: npm run db:generate
+
+      - name: Build ${{ matrix.app }}
+        if: ${{ needs.paths-filter.outputs[matrix.path_filter_name] == 'true' }}
+        run: |
+          if [ "${{ matrix.app }}" = "admin" ]; then
+            cd webapps/admin && npm run build
+          else
+            NODE_ENV=production npx nx build ${{ matrix.app }} --configuration=production --skip-nx-cache=false
+          fi
+
+      # Configure AWS credentials
+      - name: Configure AWS credentials
+        if: ${{ needs.paths-filter.outputs[matrix.path_filter_name] == 'true' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # Login to ECR
+      - name: Login to Amazon ECR
+        if: ${{ needs.paths-filter.outputs[matrix.path_filter_name] == 'true' }}
+        uses: aws-actions/amazon-ecr-login@v2
+        id: ecr-login
+
+      # Determine version bump type and get new version
+      - name: Determine version
+        if: ${{ needs.paths-filter.outputs[matrix.path_filter_name] == 'true' }}
+        id: version
+        run: |
+          # Determine version bump type based on commit message
+          if [[ "${{ github.event.head_commit.message }}" == *"[major]"* ]]; then
+            BUMP_TYPE="major"
+          elif [[ "${{ github.event.head_commit.message }}" == *"[minor]"* ]]; then
+            BUMP_TYPE="minor"
+          else
+            BUMP_TYPE="patch"
+          fi
+          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
+          
+          # Get the new version
+          NEW_VERSION=$(node scripts/version-manager.js ${{ matrix.app }} $BUMP_TYPE)
+          NEW_VERSION=$(echo "$NEW_VERSION" | tail -n 1)
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          
+          # Get the commit hash
+          COMMIT_HASH=$(git rev-parse --short HEAD)
+          echo "commit_hash=$COMMIT_HASH" >> $GITHUB_OUTPUT
+
+      # Set up Docker Buildx
+      - name: Set up Docker Buildx
+        if: ${{ needs.paths-filter.outputs[matrix.path_filter_name] == 'true' }}
+        uses: docker/setup-buildx-action@v3
+
+      # Build and push Docker image
+      - name: Build and push ${{ matrix.app }} container
+        if: ${{ needs.paths-filter.outputs[matrix.path_filter_name] == 'true' }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          build-args: |
+            SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/${{ matrix.image }}:${{ steps.version.outputs.new_version }}
+            ${{ steps.ecr-login.outputs.registry }}/${{ matrix.image }}:${{ steps.version.outputs.new_version }}-${{ steps.version.outputs.commit_hash }}
+            ${{ steps.ecr-login.outputs.registry }}/${{ matrix.image }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: ${{ matrix.platforms || '' }}
